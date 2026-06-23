@@ -110,6 +110,7 @@ jobs:
   android-apk:
     name: Android APK
     runs-on: ubuntu-latest
+    if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -197,104 +198,105 @@ jobs:
           path: release_assets/*
 
   release:
-    name: Release
-    needs: [build, android-apk]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      name: Release
+      needs: [build]
+      if: ${{ always() && needs.build.result == 'success' }}
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+          with:
+            fetch-depth: 0
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          pattern: asset-*
-          merge-multiple: true
+        - name: Download all artifacts
+          uses: actions/download-artifact@v4
+          with:
+            path: artifacts
+            pattern: asset-*
+            merge-multiple: true
 
-      - name: Get version
-        id: get-version
-        run: |
-          version="${{ github.event.inputs.version }}"
-          if [ -z "$version" ]; then
-            version="${{ github.ref_name }}"
-          fi
-          echo "VERSION=$version" >> $GITHUB_OUTPUT
-
-      - name: Get build time
-        id: get-time
-        run: |
-          build_time=$(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M:%S %z')
-          echo "BUILD_TIME=$build_time" >> $GITHUB_OUTPUT
-
-      - name: Generate changelog
-        id: changelog
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.get-version.outputs.VERSION }}
-          CURRENT_SHA: ${{ github.sha }}
-          CURRENT_PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' || contains(steps.get-version.outputs.VERSION, '-') }}
-        run: |
-          git fetch --tags --force
-
-          previous_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
-            --jq '[.[] | select(.draft == false and .tag_name != env.VERSION and (env.CURRENT_PRERELEASE == "true" or .prerelease == false))][0].tag_name // ""')"
-
-          if [ -n "$previous_tag" ] && git rev-parse "$previous_tag^{commit}" >/dev/null 2>&1; then
-            changelog="$(git log --no-merges --pretty=format:'- %s (%h)' "$previous_tag..$CURRENT_SHA")"
-            if [ -z "$changelog" ]; then
-              changelog="- 本次没有新增提交"
+        - name: Get version
+          id: get-version
+          run: |
+            version="${{ github.event.inputs.version }}"
+            if [ -z "$version" ]; then
+              version="${{ github.ref_name }}"
             fi
-            compare_url="https://github.com/${GITHUB_REPOSITORY}/compare/${previous_tag}...${VERSION}"
-            compare_link="[${previous_tag}...${VERSION}](${compare_url})"
-          else
-            previous_tag=""
-            compare_url=""
-            compare_link="无"
-            changelog="- 首次发布，未找到上一个 Release 基准"
-          fi
+            echo "VERSION=$version" >> $GITHUB_OUTPUT
 
-          {
-            echo "PREVIOUS_TAG=$previous_tag"
-            echo "COMPARE_URL=$compare_url"
-            echo "COMPARE_LINK=$compare_link"
-            echo "CHANGELOG<<EOF"
-            printf '%s\n' "$changelog"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+        - name: Get build time
+          id: get-time
+          run: |
+            build_time=$(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M:%S %z')
+            echo "BUILD_TIME=$build_time" >> $GITHUB_OUTPUT
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.get-version.outputs.VERSION }}
-          target_commitish: ${{ github.sha }}
-          name: "CFData-WEB Release ${{ steps.get-version.outputs.VERSION }}"
-          body: |
-            ## ${{ steps.get-version.outputs.VERSION }} 发布说明
+        - name: Generate changelog
+          id: changelog
+          env:
+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            VERSION: ${{ steps.get-version.outputs.VERSION }}
+            CURRENT_SHA: ${{ github.sha }}
+            CURRENT_PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' || contains(steps.get-version.outputs.VERSION, '-') }}
+          run: |
+            git fetch --tags --force
 
-            构建时间：${{ steps.get-time.outputs.BUILD_TIME }}
+            previous_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+              --jq '[.[] | select(.draft == false and .tag_name != env.VERSION and (env.CURRENT_PRERELEASE == "true" or .prerelease == false))][0].tag_name // ""')"
 
-            构建方式：GitHub Actions
+            if [ -n "$previous_tag" ] && git rev-parse "$previous_tag^{commit}" >/dev/null 2>&1; then
+              changelog="$(git log --no-merges --pretty=format:'- %s (%h)' "$previous_tag..$CURRENT_SHA")"
+              if [ -z "$changelog" ]; then
+                changelog="- 本次没有新增提交"
+              fi
+              compare_url="https://github.com/${GITHUB_REPOSITORY}/compare/${previous_tag}...${VERSION}"
+              compare_link="[${previous_tag}...${VERSION}](${compare_url})"
+            else
+              previous_tag=""
+              compare_url=""
+              compare_link="无"
+              changelog="- 首次发布，未找到上一个 Release 基准"
+            fi
 
-            上一个版本：${{ steps.changelog.outputs.PREVIOUS_TAG || '无' }}
+            {
+              echo "PREVIOUS_TAG=$previous_tag"
+              echo "COMPARE_URL=$compare_url"
+              echo "COMPARE_LINK=$compare_link"
+              echo "CHANGELOG<<EOF"
+              printf '%s\n' "$changelog"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
 
-            对比变更：${{ steps.changelog.outputs.COMPARE_LINK }}
+        - name: Create Release
+          uses: softprops/action-gh-release@v2
+          with:
+            tag_name: ${{ steps.get-version.outputs.VERSION }}
+            target_commitish: ${{ github.sha }}
+            name: "CFData-WEB Release ${{ steps.get-version.outputs.VERSION }}"
+            body: |
+              ## ${{ steps.get-version.outputs.VERSION }} 发布说明
 
-            ### 本次变更
+              构建时间：${{ steps.get-time.outputs.BUILD_TIME }}
 
-            ${{ steps.changelog.outputs.CHANGELOG }}
+              构建方式：GitHub Actions
 
-            ---
+              上一个版本：${{ steps.changelog.outputs.PREVIOUS_TAG || '无' }}
 
-            采用 GitHub Actions 自动构建。
+              对比变更：${{ steps.changelog.outputs.COMPARE_LINK }}
 
-            支持 macOS / Windows / Linux（ARM64、AMD64）。
+              ### 本次变更
 
-            支持 Android（ARM64 APK）。
-          files: artifacts/*
-          draft: false
-          prerelease: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' || contains(steps.get-version.outputs.VERSION, '-') }}
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              ${{ steps.changelog.outputs.CHANGELOG }}
+
+              ---
+
+              采用 GitHub Actions 自动构建。
+
+              支持 macOS / Windows / Linux（ARM64、AMD64）。
+
+              支持 Android（ARM64 APK）。
+            files: artifacts/*
+            draft: false
+            prerelease: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' || contains(steps.get-version.outputs.VERSION, '-') }}
+            fail_on_unmatched_files: false
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
