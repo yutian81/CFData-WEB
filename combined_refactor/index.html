@@ -4753,7 +4753,9 @@
             const separatorField = document.getElementById('resultTextSeparatorField');
             if (separatorField) separatorField.style.display = format === 'txt' ? '' : 'none';
             const rows = getCurrentResultRows(resultModalMode);
-            const available = RESULT_FIELDS.filter((f) => f.key === 'ipport' || rows.some((r) => String(r[f.key] ?? '').trim() !== '')).concat(resultCustomFields);
+            const available = format === 'txt'
+                ? RESULT_FIELDS.filter((f) => f.key === 'ipport' || rows.some((r) => String(r[f.key] ?? '').trim() !== '')).concat(resultCustomFields)
+                : RESULT_FIELDS.concat(resultCustomFields);
             document.querySelectorAll('.github-field').forEach((el) => el.style.display = '');
             document.getElementById('resultFieldPicker').innerHTML = available.map((f) => `<label class="field-pill"><input type="checkbox" value="${f.key}" ${resultFieldOrder.includes(f.key) ? 'checked' : ''} onchange="toggleResultField('${f.key}', this.checked)"> ${f.label}</label>`).join('');
             
@@ -5039,7 +5041,7 @@ function selectIPPortOnly() {
             if (format === 'txt') {
                 resultFieldOrder = getAllResultFieldOrder().filter(function (k) { return k !== 'ip' && k !== 'port'; });
             } else {
-                resultFieldOrder = getAllResultFieldOrder().filter(function (k) { return k !== 'ipport'; });
+                resultFieldOrder = RESULT_FIELDS.map(function (f) { return f.key; }).filter(function (k) { return k !== 'ipport'; });
                 var si = resultFieldOrder.indexOf('speed');
                 if (si >= 0) {
                     resultFieldOrder.splice(si, 1);
