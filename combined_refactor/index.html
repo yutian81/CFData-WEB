@@ -2648,9 +2648,10 @@
                     setFormValue('nsbSpeedMin', cfg.nsbspeedmin);
                     setFormValue('nsbSpeedLimit', cfg.nsbspeedlimit);
                     setFormValue('nsbSpeedTest', cfg.speedtest);
-                    setFormValue('nsbTls', cfg.tls ? 'true' : 'false');
+                    setFormValue('nsbTls', cfg.tls ? 'on' : 'off');
                     setFormValue('nsbCompactView', cfg.compact ? 'compact' : 'full');
                     setFormValue('nsbOutFile', cfg.out);
+                    setFormValue('nsbSourceUrl', cfg.sourceurl);
 
                     log('配置已从 cfdata-config.json 加载');
                 })
@@ -2671,6 +2672,7 @@
                         url: getFormValue('speedTestUrl') || 'auto',
 
                         nsbfallbackport: parseInt(getFormValue('nsbFallbackPort')) || 443,
+                        sourceurl: getFormValue('nsbSourceUrl') || '',
                         resultlimit: parseInt(getFormValue('nsbResultLimit')) || 1000,
                         nsbspeedmin: parseFloat(getFormValue('nsbSpeedMin')) || 0.1,
                         nsbspeedlimit: parseInt(getFormValue('nsbSpeedLimit')) || 5,
