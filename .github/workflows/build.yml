@@ -13,6 +13,11 @@ on:
         required: false
         default: false
         type: boolean
+      build_apk:
+        description: "Build Android APK"
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - "v*"
@@ -108,201 +113,200 @@ jobs:
           path: release_assets/*
 
   android-apk:
-      name: Android APK
-      runs-on: ubuntu-latest
-      steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
+    if: ${{ github.event.inputs.build_apk == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-        - name: Setup Java
-          uses: actions/setup-java@v4
-          with:
-            distribution: temurin
-            java-version: "17"
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-        - name: Setup Go
-          uses: actions/setup-go@v6
-          with:
-            go-version: "1.25.4"
-            cache-dependency-path: combined_refactor/go.sum
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.4"
+          cache-dependency-path: combined_refactor/go.sum
 
-        - name: Setup Android SDK
-          uses: android-actions/setup-android@v3
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-        - name: Setup Gradle
-          uses: gradle/actions/setup-gradle@v4
-          with:
-            gradle-version: "8.10.2"
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
 
-        - name: Set Version
-          id: set-version
-          run: |
-            version="${{ github.event.inputs.version }}"
-            if [ -z "$version" ]; then
-              version="${{ github.ref_name }}"
-            fi
-            echo "VERSION=$version" >> $GITHUB_OUTPUT
+      - name: Set Version
+        id: set-version
+        run: |
+          version="${{ github.event.inputs.version }}"
+          if [ -z "$version" ]; then
+            version="${{ github.ref_name }}"
+          fi
+          echo "VERSION=$version" >> $GITHUB_OUTPUT
 
-        - name: Download CA Certificates
-          run: |
-            curl -fsSL --retry 3 --connect-timeout 10 \
-              https://curl.se/ca/cacert.pem \
-              -o combined_refactor/ca-certificates.crt
+      - name: Download CA Certificates
+        run: |
+          curl -fsSL --retry 3 --connect-timeout 10 \
+            https://curl.se/ca/cacert.pem \
+            -o combined_refactor/ca-certificates.crt
 
-        - name: Build Android backend
-          working-directory: combined_refactor
-          env:
-            GOOS: android
-            GOARCH: arm64
-            CGO_ENABLED: "0"
-          run: |
-            go build -ldflags "-s -w -X main.appVersion=${{ steps.set-version.outputs.VERSION }}" -o ../app/src/main/jniLibs/arm64-v8a/libcfdata.so .
+      - name: Build Android backend
+        working-directory: combined_refactor
+        env:
+          GOOS: android
+          GOARCH: arm64
+          CGO_ENABLED: "0"
+        run: |
+          go build -ldflags "-s -w -X main.appVersion=${{ steps.set-version.outputs.VERSION }}" -o ../app/src/main/jniLibs/arm64-v8a/libcfdata.so .
 
-        - name: Check Keystore
-          id: check-keystore
-          env:
-            ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          run: |
-            if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-              echo "available=true" >> "$GITHUB_OUTPUT"
-              printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/cfdata-release.keystore"
-            else
-              echo "available=false" >> "$GITHUB_OUTPUT"
-              echo "ANDROID_KEYSTORE_BASE64 未设置，跳过 APK 签名和发布"
-            fi
+      - name: Prepare Release Keystore
+        id: keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/cfdata-release.keystore"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "ANDROID_KEYSTORE_BASE64 未设置，跳过 APK 签名"
+          fi
 
-        - name: Build release APK
-          if: ${{ steps.check-keystore.outputs.available == 'true' }}
-          env:
-            ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/cfdata-release.keystore
-            ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-            ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-            ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-            ANDROID_VERSION_NAME: ${{ steps.set-version.outputs.VERSION }}
-          run: gradle assembleRelease --no-daemon
+      - name: Build release APK
+        if: ${{ steps.keystore.outputs.available == 'true' }}
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/cfdata-release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_VERSION_NAME: ${{ steps.set-version.outputs.VERSION }}
+        run: gradle assembleRelease --no-daemon
 
-        - name: Verify APK Contains Backend
-          if: ${{ steps.check-keystore.outputs.available == 'true' }}
-          run: |
-            unzip -l app/build/outputs/apk/release/app-release.apk | tee apk-contents.txt
-            grep -q "lib/arm64-v8a/libcfdata.so" apk-contents.txt
-            unzip -l app/build/outputs/apk/release/app-release.apk "lib/arm64-v8a/libcfdata.so"
+      - name: Verify APK Contains Backend
+        if: ${{ steps.keystore.outputs.available == 'true' }}
+        run: |
+          unzip -l app/build/outputs/apk/release/app-release.apk | tee apk-contents.txt
+          grep -q "lib/arm64-v8a/libcfdata.so" apk-contents.txt
+          unzip -l app/build/outputs/apk/release/app-release.apk "lib/arm64-v8a/libcfdata.so"
 
-        - name: Prepare APK Asset
-          if: ${{ steps.check-keystore.outputs.available == 'true' }}
-          run: |
-            mkdir -p release_assets
-            cp app/build/outputs/apk/release/app-release.apk release_assets/cfdata-android-arm64.apk
-            cd release_assets
-            sha256sum cfdata-android-arm64.apk | awk '{print $1}' > cfdata-android-arm64.apk.sha256
+      - name: Prepare APK Asset
+        if: ${{ steps.keystore.outputs.available == 'true' }}
+        run: |
+          mkdir -p release_assets
+          cp app/build/outputs/apk/release/app-release.apk release_assets/cfdata-android-arm64.apk
+          cd release_assets
+          sha256sum cfdata-android-arm64.apk | awk '{print $1}' > cfdata-android-arm64.apk.sha256
 
-        - name: Upload Artifact
-          if: ${{ steps.check-keystore.outputs.available == 'true' }}
-          uses: actions/upload-artifact@v4
-          with:
-            name: asset-android-apk
-            path: release_assets/*
+      - name: Upload Artifact
+        if: ${{ steps.keystore.outputs.available == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: asset-android-apk
+          path: release_assets/*
 
   release:
-      name: Release
-      needs: [build]
-      if: ${{ always() && needs.build.result == 'success' }}
-      runs-on: ubuntu-latest
-      steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
-          with:
-            fetch-depth: 0
+    needs: [build, android-apk]
+    if: ${{ always() && needs.build.result == 'success' && (needs.android-apk.result == 'success' || needs.android-apk.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-        - name: Download all artifacts
-          uses: actions/download-artifact@v4
-          with:
-            path: artifacts
-            pattern: asset-*
-            merge-multiple: true
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: asset-*
+          merge-multiple: true
 
-        - name: Get version
-          id: get-version
-          run: |
-            version="${{ github.event.inputs.version }}"
-            if [ -z "$version" ]; then
-              version="${{ github.ref_name }}"
+      - name: Get version
+        id: get-version
+        run: |
+          version="${{ github.event.inputs.version }}"
+          if [ -z "$version" ]; then
+            version="${{ github.ref_name }}"
+          fi
+          echo "VERSION=$version" >> $GITHUB_OUTPUT
+
+      - name: Get build time
+        id: get-time
+        run: |
+          build_time=$(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M:%S %z')
+          echo "BUILD_TIME=$build_time" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get-version.outputs.VERSION }}
+          CURRENT_SHA: ${{ github.sha }}
+          CURRENT_PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' || contains(steps.get-version.outputs.VERSION, '-') }}
+        run: |
+          git fetch --tags --force
+
+          previous_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq '[.[] | select(.draft == false and .tag_name != env.VERSION and (env.CURRENT_PRERELEASE == "true" or .prerelease == false))][0].tag_name // ""')"
+
+          if [ -n "$previous_tag" ] && git rev-parse "$previous_tag^{commit}" >/dev/null 2>&1; then
+            changelog="$(git log --no-merges --pretty=format:'- %s (%h)' "$previous_tag..$CURRENT_SHA")"
+            if [ -z "$changelog" ]; then
+              changelog="- 本次没有新增提交"
             fi
-            echo "VERSION=$version" >> $GITHUB_OUTPUT
+            compare_url="https://github.com/${GITHUB_REPOSITORY}/compare/${previous_tag}...${VERSION}"
+            compare_link="[${previous_tag}...${VERSION}](${compare_url})"
+          else
+            previous_tag=""
+            compare_url=""
+            compare_link="无"
+            changelog="- 首次发布，未找到上一个 Release 基准"
+          fi
 
-        - name: Get build time
-          id: get-time
-          run: |
-            build_time=$(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M:%S %z')
-            echo "BUILD_TIME=$build_time" >> $GITHUB_OUTPUT
+          {
+            echo "PREVIOUS_TAG=$previous_tag"
+            echo "COMPARE_URL=$compare_url"
+            echo "COMPARE_LINK=$compare_link"
+            echo "CHANGELOG<<EOF"
+            printf '%s\n' "$changelog"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
-        - name: Generate changelog
-          id: changelog
-          env:
-            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            VERSION: ${{ steps.get-version.outputs.VERSION }}
-            CURRENT_SHA: ${{ github.sha }}
-            CURRENT_PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' || contains(steps.get-version.outputs.VERSION, '-') }}
-          run: |
-            git fetch --tags --force
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get-version.outputs.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: "CFData-WEB Release ${{ steps.get-version.outputs.VERSION }}"
+          body: |
+            ## ${{ steps.get-version.outputs.VERSION }} 发布说明
 
-            previous_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
-              --jq '[.[] | select(.draft == false and .tag_name != env.VERSION and (env.CURRENT_PRERELEASE == "true" or .prerelease == false))][0].tag_name // ""')"
+            构建时间：${{ steps.get-time.outputs.BUILD_TIME }}
 
-            if [ -n "$previous_tag" ] && git rev-parse "$previous_tag^{commit}" >/dev/null 2>&1; then
-              changelog="$(git log --no-merges --pretty=format:'- %s (%h)' "$previous_tag..$CURRENT_SHA")"
-              if [ -z "$changelog" ]; then
-                changelog="- 本次没有新增提交"
-              fi
-              compare_url="https://github.com/${GITHUB_REPOSITORY}/compare/${previous_tag}...${VERSION}"
-              compare_link="[${previous_tag}...${VERSION}](${compare_url})"
-            else
-              previous_tag=""
-              compare_url=""
-              compare_link="无"
-              changelog="- 首次发布，未找到上一个 Release 基准"
-            fi
+            构建方式：GitHub Actions
 
-            {
-              echo "PREVIOUS_TAG=$previous_tag"
-              echo "COMPARE_URL=$compare_url"
-              echo "COMPARE_LINK=$compare_link"
-              echo "CHANGELOG<<EOF"
-              printf '%s\n' "$changelog"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
+            上一个版本：${{ steps.changelog.outputs.PREVIOUS_TAG || '无' }}
 
-        - name: Create Release
-          uses: softprops/action-gh-release@v2
-          with:
-            tag_name: ${{ steps.get-version.outputs.VERSION }}
-            target_commitish: ${{ github.sha }}
-            name: "CFData-WEB Release ${{ steps.get-version.outputs.VERSION }}"
-            body: |
-              ## ${{ steps.get-version.outputs.VERSION }} 发布说明
+            对比变更：${{ steps.changelog.outputs.COMPARE_LINK }}
 
-              构建时间：${{ steps.get-time.outputs.BUILD_TIME }}
+            ### 本次变更
 
-              构建方式：GitHub Actions
+            ${{ steps.changelog.outputs.CHANGELOG }}
 
-              上一个版本：${{ steps.changelog.outputs.PREVIOUS_TAG || '无' }}
+            ---
 
-              对比变更：${{ steps.changelog.outputs.COMPARE_LINK }}
+            采用 GitHub Actions 自动构建。
 
-              ### 本次变更
+            支持 macOS / Windows / Linux（ARM64、AMD64）。
 
-              ${{ steps.changelog.outputs.CHANGELOG }}
-
-              ---
-
-              采用 GitHub Actions 自动构建。
-
-              支持 macOS / Windows / Linux（ARM64、AMD64）。
-
-              支持 Android（ARM64 APK）。
-            files: artifacts/*
-            draft: false
-            prerelease: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' || contains(steps.get-version.outputs.VERSION, '-') }}
-            fail_on_unmatched_files: false
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            支持 Android（ARM64 APK）。
+          files: artifacts/*
+          draft: false
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' || contains(steps.get-version.outputs.VERSION, '-') }}
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
