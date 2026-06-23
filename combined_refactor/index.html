@@ -150,6 +150,12 @@
             font-weight: 700;
         }
 
+        .settings-divider {
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 8px 0;
+        }
+
         .theme-options {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -1642,7 +1648,10 @@
                 <button class="menu-btn" id="theme-auto" onclick="setTheme('auto')">自动</button>
             </div>
             <div class="settings-title">本地缓存</div>
-            <button class="danger-btn" onclick="resetAllConfig()">恢复全部默认配置</button>
+                        <button class="danger-btn" onclick="resetAllConfig()">恢复全部默认配置</button>
+                        <div class="settings-divider"></div>
+                        <button class="menu-btn" onclick="saveWebConfig()" style="margin-top:6px;width:100%;">💾 保存当前设置</button>
+                        <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px;">保存到 cfdata-config.json，下次启动自动加载</div>
         </div>
 
         <div class="status-bar" id="status">正在连接服务器...</div>
@@ -2588,6 +2597,107 @@
             if (menu) menu.classList.add('hidden');
             document.body.classList.add('no-transition');
             setTimeout(() => document.body.classList.remove('no-transition'), 500);
+        }
+
+        // ----- 配置持久化 -----
+
+        function getFormValue(id) {
+            const el = document.getElementById(id);
+            if (!el) return null;
+            return el.value;
+        }
+
+        function getFormBool(id) {
+            const el = document.getElementById(id);
+            if (!el) return false;
+            return el.value === 'true' || el.value === 'on' || el.value === '1' || el.value === 'yes';
+        }
+
+        function setFormValue(id, val) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (val !== undefined && val !== null && val !== '') {
+                el.value = val;
+            }
+        }
+
+        /** 从后端加载配置文件并应用到表单控件 */
+        function loadWebConfig() {
+            fetch('/api/config')
+                .then(function (r) { return r.json(); })
+                .then(function (cfg) {
+                    if (!cfg || typeof cfg !== 'object') return;
+
+                    // 官方参数
+                    setFormValue('ipType', cfg.iptype);
+                    setFormValue('testPort', cfg.testport);
+                    setFormValue('scanThreads', cfg.threads);
+                    setFormValue('testDelay', cfg.delay);
+                    setFormValue('officialSpeedMin', cfg.speedmin);
+                    setFormValue('officialSpeedLimit', cfg.speedlimit);
+                    if (cfg.url && cfg.url !== 'auto' && cfg.url !== AUTO_SPEED_URL_VALUE) {
+                        setFormValue('speedTestUrl', cfg.url);
+                        setFormValue('officialSpeedUrlPreset', 'custom');
+                    }
+
+                    // 非标参数
+                    setFormValue('nsbFallbackPort', cfg.nsbfallbackport);
+                    setFormValue('nsbThreads', cfg.threads);
+                    setFormValue('nsbDelay', cfg.delay);
+                    setFormValue('nsbResultLimit', cfg.resultlimit);
+                    setFormValue('nsbSpeedMin', cfg.nsbspeedmin);
+                    setFormValue('nsbSpeedLimit', cfg.nsbspeedlimit);
+                    setFormValue('nsbSpeedTest', cfg.speedtest);
+                    setFormValue('nsbTls', cfg.tls ? 'true' : 'false');
+                    setFormValue('nsbCompactView', cfg.compact ? 'compact' : 'full');
+                    setFormValue('nsbOutFile', cfg.out);
+
+                    log('配置已从 cfdata-config.json 加载');
+                })
+                .catch(function (err) {
+                    // 首次运行可能没有配置文件，不报错
+                });
+        }
+
+        /** 收集当前表单控件值并保存到后端配置文件 */
+        function saveWebConfig() {
+                    var cfg = {
+                        iptype: parseInt(getFormValue('ipType')) || 4,
+                        testport: parseInt(getFormValue('testPort')) || 443,
+                        threads: parseInt(getFormValue('scanThreads')) || 100,
+                        delay: parseInt(getFormValue('testDelay')) || 500,
+                        speedmin: parseFloat(getFormValue('officialSpeedMin')) || 0.1,
+                        speedlimit: parseInt(getFormValue('officialSpeedLimit')) || 5,
+                        url: getFormValue('speedTestUrl') || 'auto',
+
+                        nsbfallbackport: parseInt(getFormValue('nsbFallbackPort')) || 443,
+                        resultlimit: parseInt(getFormValue('nsbResultLimit')) || 1000,
+                        nsbspeedmin: parseFloat(getFormValue('nsbSpeedMin')) || 0.1,
+                        nsbspeedlimit: parseInt(getFormValue('nsbSpeedLimit')) || 5,
+                        speedtest: parseInt(getFormValue('nsbSpeedTest')) || 0,
+                        tls: getFormBool('nsbTls'),
+                        compact: getFormValue('nsbCompactView') === 'compact',
+                        out: getFormValue('nsbOutFile') || 'ip.csv'
+                    };
+
+            fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(cfg)
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (result) {
+                    if (result.success) {
+                        showAlert('配置已保存到 ' + result.path);
+                        var menu = document.getElementById('settingsMenu');
+                        if (menu) menu.classList.add('hidden');
+                    } else {
+                        showAlert('保存失败: ' + (result.message || '未知错误'));
+                    }
+                })
+                .catch(function (err) {
+                    showAlert('保存配置失败: ' + err.message);
+                });
         }
 
         function wsSend(payload) {
@@ -5425,6 +5535,8 @@
                     applySpeedUrlConfig('speedTestUrl', 'officialSpeedUrlPreset', speedDefault);
                     applySpeedUrlConfig('nsbSpeedUrl', 'nsbSpeedUrlPreset', speedDefault);
                     renderVersionInfo(msg.data || {});
+                    // 从 cfdata-config.json 加载持久化设置
+                    loadWebConfig();
                     break;
                 case 'version_info':
                     renderVersionInfo(msg.data || {});

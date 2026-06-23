@@ -176,6 +176,9 @@ func main() {
 			fmt.Printf("CLI 执行失败: %v\n", err)
 			return
 		}
+	} else {
+		// Web 模式也加载 cfdata-config.json，实现配置持久化
+		loadWebConfig()
 	}
 	speedTestWorkers = cliCfg.speedTest
 	configureHTTPClients()
@@ -233,6 +236,17 @@ func main() {
 		_, _ = w.Write(data)
 	}))
 	http.HandleFunc("/ws", requireAuth(handleWebSocket))
+	// 配置持久化 API：GET 读取配置，POST 保存配置
+	http.HandleFunc("/api/config", requireAuth(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleGetConfig(w, r)
+		case http.MethodPost:
+			handleSaveConfig(w, r)
+		default:
+			http.Error(w, "仅支持 GET/POST", http.StatusMethodNotAllowed)
+		}
+	}))
 
 	addr := fmt.Sprintf(":%d", listenPort)
 	displayHost := "localhost"
