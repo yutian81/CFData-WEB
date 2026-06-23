@@ -2056,7 +2056,7 @@
                             <div class="field-head-actions">
                                 <button class="action-btn" onclick="selectAllResultFields()">全选</button>
                                 <button class="action-btn" onclick="selectCompactResultFields()">精简</button>
-                                <button class="action-btn" onclick="selectIPPortOnly()">仅 IP:PORT</button>
+                                <button class="action-btn" onclick="selectIPPortOnly()">IP:PORT</button>
                             </div>
                         </div>
                         <div class="field-picker" id="resultFieldPicker"></div>
@@ -5015,17 +5015,32 @@
         }
 
 function selectIPPortOnly() {
-            resultFieldOrder = ['ipport'];
+            const format = document.getElementById('resultFormat').value;
+            if (format === 'txt') {
+                resultFieldOrder = ['ipport', 'loc'];
+            } else {
+                resultFieldOrder = ['ipport'];
+            }
             renderResultFieldOptions();
         }
 
         function selectCompactResultFields() {
-            resultFieldOrder = getCompactResultFieldOrder();
+            const format = document.getElementById('resultFormat').value;
+            if (format === 'txt') {
+                resultFieldOrder = ['ipport', 'loc', 'speed'];
+            } else {
+                resultFieldOrder = getCompactResultFieldOrder();
+            }
             renderResultFieldOptions();
         }
 
         function selectAllResultFields() {
-            resultFieldOrder = getAllResultFieldOrder();
+            const format = document.getElementById('resultFormat').value;
+            if (format === 'txt') {
+                resultFieldOrder = getAllResultFieldOrder().filter(function (k) { return k !== 'ip' && k !== 'port'; });
+            } else {
+                resultFieldOrder = getAllResultFieldOrder();
+            }
             renderResultFieldOptions();
         }
 
