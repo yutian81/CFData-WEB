@@ -496,9 +496,8 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 	}
 
 	expandedEntries := make([]struct {
-		ip            string
-		port          int
-		originalInput string
+		ip   string
+		port int
 	}, 0, len(ips))
 
 	for _, item := range ips {
@@ -521,19 +520,11 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 			}
 			continue
 		}
-		isDomain := strings.ContainsFunc(host, func(r rune) bool {
-			return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
-		}) || (len(resolvedIPs) == 1 && resolvedIPs[0] != host)
 		for _, ip := range resolvedIPs {
-			originalInput := ""
-			if isDomain {
-				originalInput = host
-			}
 			expandedEntries = append(expandedEntries, struct {
-				ip            string
-				port          int
-				originalInput string
-			}{ip, port, originalInput})
+				ip   string
+				port int
+			}{ip, port})
 		}
 	}
 
@@ -587,9 +578,6 @@ func runNSBTask(ctx context.Context, session *appSession, fileName, fileContent,
 		entry := expandedEntries[idx]
 		item := fmt.Sprintf("%s %d", entry.ip, entry.port)
 		res, failure := scanNSBEntry(itemCtx, item, fallbackPort, enableTLS, delay, targetDC, idx)
-		if res != nil {
-			res.originalInput = entry.originalInput
-		}
 		if debugMode && failure != nil {
 			failMutex.Lock()
 			failures = append(failures, *failure)
@@ -986,10 +974,10 @@ func nsbCSVRows(results []iptestResult, includeSpeed bool, compact bool) [][]str
 
 func nsbCSVHeaders(compact bool) []string {
 	if compact {
-		return []string{"IP地址", "OriginalInput", "端口号", "TLS", "丢包率", "网络延迟", "下载速度", "出站IP", "IP类型", "数据中心", "源IP位置", "地区", "城市", "ASN号码", "ASN组织"}
+		return []string{"IP地址", "端口号", "TLS", "网络延迟", "数据中心", "地区", "源IP位置", "城市", "ASN号码", "ASN组织", "下载速度"}
 	}
-	headers := []string{"IP地址", "OriginalInput", "端口号", "TLS", "丢包率", "网络延迟", "下载速度", "出站IP", "IP类型", "数据中心", "源IP位置", "地区", "城市", "ASN号码", "ASN组织"}
-	headers = append(headers, "访问协议", "TLS版本", "SNI", "HTTP版本", "WARP", "Gateway", "RBI", "密钥交换", "时间戳")
+	headers := []string{"IP地址", "端口号", "TLS", "丢包率", "网络延迟", "出站IP", "IP类型", "数据中心", "源IP位置", "地区", "城市", "ASN号码", "ASN组织"}
+	headers = append(headers, "访问协议", "TLS版本", "SNI", "HTTP版本", "WARP", "Gateway", "RBI", "密钥交换", "时间戳", "下载速度")
 	return headers
 }
 
@@ -1008,30 +996,24 @@ func nsbCSVRow(res iptestResult, includeSpeed bool, compact bool) []string {
 	if compact {
 		return []string{
 			res.ipAddr,
-			res.originalInput,
 			strconv.Itoa(res.port),
 			strconv.FormatBool(res.visitScheme == "https"),
-			fmt.Sprintf("%.0f%%", res.lossRate*100),
 			res.latency,
-			speed,
-			res.outboundIP,
-			res.ipType,
 			res.dataCenter,
-			res.locCode,
 			res.region,
+			res.locCode,
 			res.city,
 			fallbackDash(res.asnNumber),
 			fallbackDash(res.asnOrg),
+			speed,
 		}
 	}
 	row := []string{
 		res.ipAddr,
-		res.originalInput,
 		strconv.Itoa(res.port),
 		strconv.FormatBool(res.visitScheme == "https"),
 		fmt.Sprintf("%.0f%%", res.lossRate*100),
 		res.latency,
-		speed,
 		res.outboundIP,
 		res.ipType,
 		res.dataCenter,
@@ -1051,8 +1033,9 @@ func nsbCSVRow(res iptestResult, includeSpeed bool, compact bool) []string {
 		res.rbi,
 		res.kex,
 		res.timestamp,
+		speed,
 	)
-	return row
+		return row
 }
 
 func fallbackDash(value string) string {

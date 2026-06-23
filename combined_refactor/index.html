@@ -2020,7 +2020,7 @@
                     </div>
                     <div class="modal-field">
                         <label>文件名</label>
-                        <input id="resultFileName" type="text" value="cfdata-results">
+                        <input id="resultFileName" type="text" value="ip-all">
                     </div>
                     <div class="modal-field">
                         <label>开始行</label>
@@ -2056,7 +2056,8 @@
                             <div class="field-head-actions">
                                 <button class="action-btn" id="resultSelectAllBtn" onclick="toggleAllResultFields()">全选</button>
                                 <button class="action-btn" onclick="selectIPPortOnly()">仅 IP:PORT</button>
-                                <button class="action-btn" onclick="selectDefaultResultFields()">默认选择</button>
+                                <button class="action-btn" onclick="selectCompactResultFields()">精简版</button>
+                                <button class="action-btn" onclick="selectAllResultFields()">完整版</button>
                             </div>
                         </div>
                         <div class="field-picker" id="resultFieldPicker"></div>
@@ -3570,7 +3571,7 @@
             const tbody = document.querySelector('#scanTable tbody');
             const latencyVal = parseFloat(row.LatencyStr);
             const latencyColor = getLatencyColor(latencyVal);
-            const html = `<tr><td>${renderIPCell(row.IP, row.OriginalInput || row.originalInput)}</td><td><span class="copy-ip" onclick="copyToClipboard('${row.Port ?? ''}', event)">${row.Port ?? '-'}</span></td><td>${row.DataCenter || '-'}</td><td>${row.DCCountry || '-'}</td><td>${row.Region || '-'}</td><td>${row.City || '-'}</td><td style="color:${latencyColor}; font-weight:600;">${row.LatencyStr || '-'}</td></tr>`;
+            const html = `<tr><td>${renderIPCell(row.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${row.Port ?? ''}', event)">${row.Port ?? '-'}</span></td><td>${row.DataCenter || '-'}</td><td>${row.DCCountry || '-'}</td><td>${row.Region || '-'}</td><td>${row.City || '-'}</td><td style="color:${latencyColor}; font-weight:600;">${row.LatencyStr || '-'}</td></tr>`;
             tbody.insertAdjacentHTML('beforeend', html);
         }
 
@@ -3619,23 +3620,15 @@
             return String(v ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         }
 
-        function renderIPCell(ip, originalInput) {
+        function renderIPCell(ip) {
             const rawIP = String(ip ?? '');
             const safeIP = escapeHTML(rawIP);
             const jsIP = escapeJSString(rawIP);
             const hrefIP = encodeURIComponent(rawIP);
-            let domainIcon = '';
-            if (originalInput && originalInput !== rawIP) {
-                const isDomain = /[a-zA-Z]/.test(originalInput);
-                if (isDomain) {
-                    const safeSource = escapeHTML(originalInput);
-                    domainIcon = `<span class="ip-detail-link" title="来源域名: ${safeSource}" onclick="event.stopPropagation()" style="cursor:default;">ⓗ</span>`;
-                }
-            }
-            return `<span class="ip-cell"><span class="copy-ip" onclick="copyToClipboard('${jsIP}', event)">${safeIP}</span>${domainIcon}<a class="ip-detail-link" href="https://ippure.com/?ip=${hrefIP}" target="_blank" rel="noopener noreferrer" title="前往 ippure.com 查看 IP 详情" onclick="event.stopPropagation()">ⓘ</a></span>`;
+            return `<span class="ip-cell"><span class="copy-ip" onclick="copyToClipboard('${jsIP}', event)">${safeIP}</span><a class="ip-detail-link" href="https://ippure.com/?ip=${hrefIP}" target="_blank" rel="noopener noreferrer" title="前往 ippure.com 查看 IP 详情" onclick="event.stopPropagation()">ⓘ</a></span>`;
         }
 
-        function renderNSBRowFromCSV(headers, r, originalInput) {
+        function renderNSBRowFromCSV(headers, r) {
             let ipIndex = headers.indexOf('IP地址');
             let portIndex = headers.indexOf('端口号');
             let latencyIndex = headers.indexOf('网络延迟');
@@ -3647,7 +3640,7 @@
                 const val = escapeHTML(r[idx] ?? '');
                 const rawVal = String(r[idx] ?? '');
                 if (idx === ipIndex && ipIndex !== -1) {
-                    return `<td>${renderIPCell(rawVal, originalInput)}</td>`;
+                    return `<td>${renderIPCell(rawVal)}</td>`;
                 } else if (idx === portIndex && portIndex !== -1) {
                     return `<td><span class="copy-ip" onclick="copyToClipboard('${escapeJSString(rawVal)}', event)">${val}</span></td>`;
                 } else if (idx === latencyIndex && latencyIndex !== -1) {
@@ -3680,13 +3673,10 @@
             tbody.innerHTML = '';
             renderScanHeaders('nsb');
             const visibleHeaders = filterNSBHeaders(headers);
-            const originalInputIndex = headers.map(normalizeNSBHeader).indexOf('OriginalInput');
-
             const filteredRows = filterNSBRowsByQualified(filterNSBRowsByIPType(headers, rows, nsbTableIPTypeFilter), headers, nsbTableQualifiedFilter);
             filteredRows.forEach((r) => {
                 const visibleRow = filterNSBRow(headers, r);
-                const originalInput = originalInputIndex !== -1 ? r[originalInputIndex] : undefined;
-                const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow, originalInput);
+                const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow);
                 const rowStatus = nsbRowStatusFromCSV(headers, r);
                 tbody.insertAdjacentHTML('beforeend', `<tr class="${rowStatus === 'qualified' ? 'row-qualified' : (rowStatus === 'unqualified' ? 'row-unqualified' : '')}">${tds}</tr>`);
             });
@@ -3695,8 +3685,8 @@
             updateNSBSpeedButtons();
         }
 
-        const NSB_LIVE_HEADERS = ['IP地址', 'OriginalInput', '端口号', 'TLS', '丢包率', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织', '访问协议', 'TLS版本', 'SNI', 'HTTP版本', 'WARP', 'Gateway', 'RBI', '密钥交换', '时间戳'];
-        const NSB_COMPACT_HEADERS = ['IP地址', 'OriginalInput', '端口号', 'TLS', '丢包率', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织'];
+        const NSB_LIVE_HEADERS = ['IP地址', '端口号', 'TLS', '丢包率', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织', '访问协议', 'TLS版本', 'SNI', 'HTTP版本', 'WARP', 'Gateway', 'RBI', '密钥交换', '时间戳'];
+        const NSB_COMPACT_HEADERS = ['IP地址', '端口号', 'TLS', '网络延迟', '数据中心', '地区', '源IP位置', '城市', 'ASN号码', 'ASN组织', '下载速度'];
 
         function normalizeNSBHeader(header) {
             if (header === 'IP') return 'IP地址';
@@ -3705,38 +3695,28 @@
         }
 
         function filterNSBHeaders(headers) {
-            const normalized = (headers || []).map(normalizeNSBHeader).filter(h => h !== 'OriginalInput');
+            const normalized = (headers || []).map(normalizeNSBHeader);
             if (!nsbCompactView) return normalized;
-            return NSB_COMPACT_HEADERS.filter((h) => normalized.includes(h) && h !== 'OriginalInput');
+            return NSB_COMPACT_HEADERS.filter((h) => normalized.includes(h));
         }
 
         function filterNSBRow(headers, row) {
+            if (!nsbCompactView) return row;
             const normalized = (headers || []).map(normalizeNSBHeader);
-            const originalInputIndex = normalized.indexOf('OriginalInput');
-            let filteredRow = row;
-            
-            if (originalInputIndex !== -1) {
-                filteredRow = row.filter((_, idx) => idx !== originalInputIndex);
-            }
-            
-            if (!nsbCompactView) return filteredRow;
-            
-            const adjustedNormalized = normalized.filter(h => h !== 'OriginalInput');
-            return NSB_COMPACT_HEADERS.filter((h) => adjustedNormalized.includes(h) && h !== 'OriginalInput').map((h) => {
-                const idx = adjustedNormalized.indexOf(h);
-                return idx !== -1 ? filteredRow[idx] : '';
+            return NSB_COMPACT_HEADERS.map((h) => {
+                const idx = normalized.indexOf(h);
+                return idx !== -1 ? row[idx] : '';
             });
         }
 
         function getVisibleNSBHeaders() {
             if (nsbHeaders.length) return filterNSBHeaders(nsbHeaders);
-            const base = nsbCompactView ? NSB_COMPACT_HEADERS : NSB_LIVE_HEADERS;
-            return base.filter(h => h !== 'OriginalInput');
+            return nsbCompactView ? NSB_COMPACT_HEADERS : NSB_LIVE_HEADERS;
         }
 
         function nsbRowToArray(row) {
             return [
-                row.ip || '', row.originalInput || '', row.port || '', row.tls ?? '-', row.lossRate || '0%', row.latency || '-', row.speed || '-',
+                row.ip || '', row.port || '', row.tls ?? '-', row.lossRate || '0%', row.latency || '-', row.speed || '-',
                 row.outboundIP || '-', row.ipType || '-', row.dc || '-', row.loc || '-',
                 row.region || '-', row.city || '-', row.asnNumber || '-', row.asnOrg || '-',
                 row.visitScheme || '-', row.tlsVersion || '-', row.sni || '-', row.httpVersion || '-',
@@ -3760,7 +3740,7 @@
         function renderNSBLiveRowHTML(row) {
             const visibleHeaders = getVisibleNSBHeaders();
             const visibleRow = filterNSBRow(NSB_LIVE_HEADERS, nsbRowToArray(row));
-            const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow, row.originalInput);
+            const tds = renderNSBRowFromCSV(visibleHeaders, visibleRow);
             const rowStatus = getSpeedStatus(row.speed, isNSBSpeedQualified(row.speed));
             return `<tr class="${rowStatus === 'qualified' ? 'row-qualified' : (rowStatus === 'unqualified' ? 'row-unqualified' : '')}">${tds}</tr>`;
         }
@@ -4058,7 +4038,7 @@
             const isTesting = currentSpeedTestingIP === res.IP;
             const speedDisabled = isTesting || isTaskRunning || officialBatchSpeedRunning;
             const buttonText = isTesting ? '测速中' : (res.Speed ? '重新测速' : '测速');
-            const row = `<tr class="${speedStatus === 'qualified' ? 'row-qualified' : (speedStatus === 'unqualified' ? 'row-unqualified' : '')}"><td>${renderIPCell(res.IP, res.OriginalInput || res.originalInput)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${meta.dc || '-'}</td><td>${meta.dcCountry || '-'}</td><td>${meta.region || '-'}</td><td>${meta.city || '-'}</td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}" style="color:${speedColor};"><span>${speedText}</span>${renderSpeedStatusTag(speedStatus)}</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')" ${speedDisabled ? 'disabled' : ''}>${buttonText}</button></td></tr>`;
+            const row = `<tr class="${speedStatus === 'qualified' ? 'row-qualified' : (speedStatus === 'unqualified' ? 'row-unqualified' : '')}"><td>${renderIPCell(res.IP)}</td><td><span class="copy-ip" onclick="copyToClipboard('${port}', event)">${port}</span></td><td>${meta.dc || '-'}</td><td>${meta.dcCountry || '-'}</td><td>${meta.region || '-'}</td><td>${meta.city || '-'}</td><td>${(res.LossRate * 100).toFixed(0)}%</td><td>${(res.MinLatency / 1_000_000).toFixed(0)} ms</td><td>${(res.MaxLatency / 1_000_000).toFixed(0)} ms</td><td style="color:${getLatencyColor(res.AvgLatency / 1_000_000)}; font-weight:600;">${(res.AvgLatency / 1_000_000).toFixed(0)} ms</td><td style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:none;"><span class="speed-result" id="speed-val-${res.IP.replace(/[:.]/g, '_')}" style="color:${speedColor};"><span>${speedText}</span>${renderSpeedStatusTag(speedStatus)}</span><button class="action-btn speed-btn" id="btn-speed-${res.IP.replace(/[:.]/g, '_')}" onclick="runSpeedTest('${res.IP}')" ${speedDisabled ? 'disabled' : ''}>${buttonText}</button></td></tr>`;
             document.querySelector('#testTable tbody').insertAdjacentHTML('beforeend', row);
         }
 
@@ -4590,7 +4570,7 @@
             const formatSelect = document.getElementById('resultFormat');
             if (formatSelect && !formatSelect.value) formatSelect.value = 'txt';
             const nameInput = document.getElementById('resultFileName');
-            if (nameInput && !nameInput.value.trim()) nameInput.value = resultModalMode === 'nsb' ? 'Cloudflare_NSB_Results' : (resultModalMode === 'test' ? 'Cloudflare_SpeedTest_Results' : 'Cloudflare_Scan_Results');
+            if (nameInput && !nameInput.value.trim()) nameInput.value = 'ip-all';
             const filterField = document.getElementById('resultIPTypeFilterField');
             if (filterField) filterField.style.display = resultModalMode === 'nsb' ? '' : 'none';
             const filterSelect = document.getElementById('resultIPTypeFilter');
@@ -4736,7 +4716,7 @@
         }
 
         function getDefaultResultFieldOrderFor(mode, format) {
-            if (format === 'txt') return mode === 'nsb' ? ['ipport', 'dc', 'loc'] : ['ipport', 'dc', 'dcCountry'];
+            if (format === 'txt') return mode === 'nsb' ? ['ipport', 'loc', 'speed'] : ['ipport', 'dc', 'dcCountry'];
             if (format === 'csv') return getCompactResultFieldOrderFor(mode);
             const rows = getCurrentResultRows(mode);
             if (!rows.length) return ['ipport'];
@@ -4757,7 +4737,7 @@
         }
 
         function getCompactResultFieldOrderFor(mode) {
-            if (mode === 'nsb') return ['ip', 'port', 'tls', 'lossRate', 'latency', 'speed', 'outboundIP', 'ipType', 'dc', 'loc', 'region', 'city', 'asnNumber', 'asnOrg'];
+            if (mode === 'nsb') return ['ip', 'port', 'tls', 'latency', 'dc', 'region', 'loc', 'city', 'asnNumber', 'asnOrg', 'speed'];
             return getOfficialResultFieldOrder(mode);
         }
 
@@ -5049,7 +5029,7 @@
 
         function toggleAllResultFields() {
             if (areAllResultFieldsSelected()) {
-                selectDefaultResultFields();
+                selectCompactResultFields();
                 return;
             }
             resultFieldOrder = getAllResultFieldOrder();
@@ -5061,8 +5041,13 @@
             renderResultFieldOptions();
         }
 
-        function selectDefaultResultFields() {
-            resultFieldOrder = getDefaultResultFieldOrder(document.getElementById('resultFormat').value);
+        function selectCompactResultFields() {
+            resultFieldOrder = getCompactResultFieldOrder();
+            renderResultFieldOptions();
+        }
+
+        function selectAllResultFields() {
+            resultFieldOrder = getAllResultFieldOrder();
             renderResultFieldOptions();
         }
 
@@ -5426,7 +5411,7 @@
                 showNoticeCard(err.message || '暂无可操作结果');
                 return;
             }
-            const name = document.getElementById('resultFileName').value.trim() || 'cfdata-results';
+            const name = document.getElementById('resultFileName').value.trim() || 'ip-all';
             downloadFile(content, name, format);
         }
 
