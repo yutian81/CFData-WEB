@@ -3684,7 +3684,7 @@
             updateNSBSpeedButtons();
         }
 
-        const NSB_LIVE_HEADERS = ['IP地址', '端口号', 'TLS', '丢包率', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '源IP位置', '地区', '城市', 'ASN号码', 'ASN组织', '访问协议', 'TLS版本', 'SNI', 'HTTP版本', 'WARP', 'Gateway', 'RBI', '密钥交换', '时间戳'];
+        const NSB_LIVE_HEADERS = ['IP地址', '端口号', 'TLS', '丢包率', '网络延迟', '下载速度', '出站IP', 'IP类型', '数据中心', '地区', '源IP位置', '城市', 'ASN号码', 'ASN组织', '访问协议', 'TLS版本', 'SNI', 'HTTP版本', 'WARP', 'Gateway', 'RBI', '密钥交换', '时间戳'];
         const NSB_COMPACT_HEADERS = ['IP地址', '端口号', 'TLS', '网络延迟', '数据中心', '地区', '源IP位置', '城市', 'ASN号码', 'ASN组织', '下载速度'];
 
         function normalizeNSBHeader(header) {
@@ -4545,8 +4545,8 @@
             { key: 'ipType', label: 'IP类型' },
             { key: 'dc', label: '数据中心', txt: true },
             { key: 'dcCountry', label: '落地区域', txt: true },
-            { key: 'loc', label: '源IP位置' },
             { key: 'region', label: '地区', txt: true },
+            { key: 'loc', label: '源IP位置' },
             { key: 'city', label: '城市' },
             { key: 'asnNumber', label: 'ASN号码' },
             { key: 'asnOrg', label: 'ASN组织' },
@@ -4753,9 +4753,7 @@
             const separatorField = document.getElementById('resultTextSeparatorField');
             if (separatorField) separatorField.style.display = format === 'txt' ? '' : 'none';
             const rows = getCurrentResultRows(resultModalMode);
-            const available = format === 'txt'
-                ? RESULT_FIELDS.filter((f) => f.key === 'ipport' || rows.some((r) => String(r[f.key] ?? '').trim() !== '')).concat(resultCustomFields)
-                : RESULT_FIELDS.concat(resultCustomFields);
+            const available = RESULT_FIELDS.filter((f) => f.key === 'ipport' || rows.some((r) => String(r[f.key] ?? '').trim() !== '')).concat(resultCustomFields);
             document.querySelectorAll('.github-field').forEach((el) => el.style.display = '');
             document.getElementById('resultFieldPicker').innerHTML = available.map((f) => `<label class="field-pill"><input type="checkbox" value="${f.key}" ${resultFieldOrder.includes(f.key) ? 'checked' : ''} onchange="toggleResultField('${f.key}', this.checked)"> ${f.label}</label>`).join('');
             
@@ -5041,7 +5039,7 @@ function selectIPPortOnly() {
             if (format === 'txt') {
                 resultFieldOrder = getAllResultFieldOrder().filter(function (k) { return k !== 'ip' && k !== 'port'; });
             } else {
-                resultFieldOrder = RESULT_FIELDS.map(function (f) { return f.key; }).filter(function (k) { return k !== 'ipport'; });
+                resultFieldOrder = getAllResultFieldOrder();
                 var si = resultFieldOrder.indexOf('speed');
                 if (si >= 0) {
                     resultFieldOrder.splice(si, 1);

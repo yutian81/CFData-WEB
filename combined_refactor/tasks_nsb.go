@@ -976,7 +976,7 @@ func nsbCSVHeaders(compact bool) []string {
 	if compact {
 		return []string{"IP地址", "端口号", "TLS", "网络延迟", "数据中心", "地区", "源IP位置", "城市", "ASN号码", "ASN组织", "下载速度"}
 	}
-	headers := []string{"IP地址", "端口号", "TLS", "丢包率", "网络延迟", "出站IP", "IP类型", "数据中心", "源IP位置", "地区", "城市", "ASN号码", "ASN组织"}
+	headers := []string{"IP地址", "端口号", "TLS", "丢包率", "网络延迟", "出站IP", "IP类型", "数据中心", "地区", "源IP位置", "城市", "ASN号码", "ASN组织"}
 	headers = append(headers, "访问协议", "TLS版本", "SNI", "HTTP版本", "WARP", "Gateway", "RBI", "密钥交换", "时间戳", "下载速度")
 	return headers
 }
@@ -1017,8 +1017,8 @@ func nsbCSVRow(res iptestResult, includeSpeed bool, compact bool) []string {
 		res.outboundIP,
 		res.ipType,
 		res.dataCenter,
-		res.locCode,
 		res.region,
+		res.locCode,
 		res.city,
 		fallbackDash(res.asnNumber),
 		fallbackDash(res.asnOrg),
