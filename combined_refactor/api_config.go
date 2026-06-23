@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 )
@@ -87,15 +88,32 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 		current = defaultCLIFileConfig()
 	}
 
-	// 解析传入的更新
+	// 先读取原始 body，同时解析为 map（判断哪些字段被发送了）和 struct
+	bodyBytes, err := io.ReadAll(r.Body)
+	r.Body.Close()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("读取请求体失败: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// 判断哪些字段是前端显式发送的
+	var raw map[string]interface{}
+	provided := map[string]bool{}
+	if err := json.Unmarshal(bodyBytes, &raw); err == nil {
+		for k := range raw {
+			provided[k] = true
+		}
+	}
+
+	// 解析为结构化配置
 	var incoming cliFileConfig
-	if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
+	if err := json.Unmarshal(bodyBytes, &incoming); err != nil {
 		http.Error(w, fmt.Sprintf("解析请求体失败: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	// 合并：仅覆盖传入的非零值字段
-	mergeCLIFileConfig(&current, incoming)
+	// 合并：仅覆盖传入的字段
+	mergeCLIFileConfig(&current, incoming, provided)
 
 	// 写回文件
 	if err := writeCLIConfigTemplate(configPath, current); err != nil {
@@ -124,7 +142,8 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // mergeCLIFileConfig 将 src 的非零字段合并到 dst
-func mergeCLIFileConfig(dst *cliFileConfig, src cliFileConfig) {
+// provided 标记前端实际发送的字段，用于保护未发送的 bool 不被零值覆盖
+func mergeCLIFileConfig(dst *cliFileConfig, src cliFileConfig, provided map[string]bool) {
 	if src.Mode != "" {
 		dst.Mode = src.Mode
 	}
@@ -191,15 +210,31 @@ func mergeCLIFileConfig(dst *cliFileConfig, src cliFileConfig) {
 	if src.Fields != "" {
 		dst.Fields = src.Fields
 	}
-	// Bool 字段——直接覆盖，因为 false 也是有效值
-	dst.TLS = src.TLS
-	dst.Compact = src.Compact
-	dst.CompactIPv4 = src.CompactIPv4
-	dst.NSBQualified = src.NSBQualified
-	dst.GitHub = src.GitHub
-	dst.Progress = src.Progress
-	dst.CLI = src.CLI
-	dst.NoColor = src.NoColor
+	// Bool 字段——只在显式发送时覆盖
+	if provided["tls"] {
+		dst.TLS = src.TLS
+	}
+	if provided["compact"] {
+		dst.Compact = src.Compact
+	}
+	if provided["compactipv4"] {
+		dst.CompactIPv4 = src.CompactIPv4
+	}
+	if provided["nsbqualified"] {
+		dst.NSBQualified = src.NSBQualified
+	}
+	if provided["github"] {
+		dst.GitHub = src.GitHub
+	}
+	if provided["progress"] {
+		dst.Progress = src.Progress
+	}
+	if provided["cli"] {
+		dst.CLI = src.CLI
+	}
+	if provided["nocolor"] {
+		dst.NoColor = src.NoColor
+	}
 	// 调试模式
 	if src.Debug != nil {
 		dst.Debug = src.Debug
