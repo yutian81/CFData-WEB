@@ -5019,7 +5019,7 @@ function selectIPPortOnly() {
             if (format === 'txt') {
                 resultFieldOrder = ['ipport', 'loc'];
             } else {
-                resultFieldOrder = ['ipport'];
+                resultFieldOrder = ['ip', 'port', 'loc', 'speed'];
             }
             renderResultFieldOptions();
         }
@@ -5039,7 +5039,7 @@ function selectIPPortOnly() {
             if (format === 'txt') {
                 resultFieldOrder = getAllResultFieldOrder().filter(function (k) { return k !== 'ip' && k !== 'port'; });
             } else {
-                resultFieldOrder = getAllResultFieldOrder();
+                resultFieldOrder = getAllResultFieldOrder().filter(function (k) { return k !== 'ipport'; });
             }
             renderResultFieldOptions();
         }
