@@ -5040,6 +5040,11 @@ function selectIPPortOnly() {
                 resultFieldOrder = getAllResultFieldOrder().filter(function (k) { return k !== 'ip' && k !== 'port'; });
             } else {
                 resultFieldOrder = getAllResultFieldOrder().filter(function (k) { return k !== 'ipport'; });
+                var si = resultFieldOrder.indexOf('speed');
+                if (si >= 0) {
+                    resultFieldOrder.splice(si, 1);
+                    resultFieldOrder.push('speed');
+                }
             }
             renderResultFieldOptions();
         }
